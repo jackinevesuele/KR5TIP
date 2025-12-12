@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Счётчик кликов</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <h1>Счётчик кликов</h1>
+
+    <div class="counter-block">
+      <div id="counterValue" class="counter-value">0</div>
+      <div class="buttons-row">
+        <button class="btn btn-main" data-step="1">+1</button>
+        <button class="btn btn-main" data-step="5">+5</button>
+        <button class="btn btn-main" data-step="10">+10</button>
+      </div>
+      <button class="btn btn-danger" id="resetBtn">Сбросить</button>
+    </div>
+
+    <div class="history-block">
+  <div class="history-header">
+    <h2>История кликов</h2>
+    <div class="history-controls">
+      <label>
+        Последние:
+        <select id="historyLimitSelect">
+          <option value="">все</option>
+          <option value="5">5</option>
+          <option value="10" selected>10</option>
+          <option value="20">20</option>
+        </select>
+      </label>
+      <label>
+        ID:
+        <input type="number" id="entryIdInput" min="1" placeholder="1" style="width: 70px; padding: 6px;">
+      </label>
+      <button class="btn btn-secondary" id="loadHistoryBtn">Обновить</button>
+      <button class="btn btn-secondary" id="loadEntryBtn">По ID</button>
+    </div>
+  </div>
+  <div id="historyList" class="history-list"></div>
+</div>
+
+
+ <script>
+  const counterValueEl = document.getElementById('counterValue');
+  const historyListEl = document.getElementById('historyList');
+  const historyLimitSelect = document.getElementById('historyLimitSelect');
+  const entryIdInput = document.getElementById('entryIdInput');
+  const loadHistoryBtn = document.getElementById('loadHistoryBtn');
+  const loadEntryBtn = document.getElementById('loadEntryBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const incrementButtons = document.querySelectorAll('.btn-main');
+
+  async function fetchJson(url, options) {
+    const response = await fetch(url, options);
+    return response.json();
+  }
+
+  async function loadCounter() {
+    const data = await fetchJson('/api/clicks');
+    counterValueEl.textContent = data.count;
+  }
+
+  async function loadHistory() {
+    const limit = historyLimitSelect.value;
+    const url = limit
+      ? `/api/clicks/history?limit=${limit}`
+      : '/api/clicks/history';
+
+    const data = await fetchJson(url);
+
+    historyListEl.innerHTML = '';
+
+    if (!data.history.length) {
+      historyListEl.innerHTML = '<div class="history-empty">История пуста</div>';
+      return;
+    }
+
+    data.history.forEach(entry => {
+      const item = document.createElement('div');
+      item.className = 'history-item';
+      const date = new Date(entry.timestamp).toLocaleString('ru-RU');
+      item.innerHTML = `
+        <div class="history-main">
+          <span class="history-time">${date}</span>
+          <span class="history-inc">+${entry.increment}</span>
+        </div>
+        <div class="history-result">Значение: ${entry.result}</div>
+      `;
+      historyListEl.appendChild(item);
+    });
+  }
+
+  async function loadEntryById() {
+    const id = entryIdInput.value;
+    if (!id) {
+      historyListEl.innerHTML = '<div class="history-empty">Введите ID</div>';
+      return;
+    }
+
+    try {
+      const data = await fetchJson(`/api/clicks/entry/${id}`);
+      historyListEl.innerHTML = '';
+
+      const item = document.createElement('div');
+      item.className = 'history-item';
+      const date = new Date(data.timestamp).toLocaleString('ru-RU');
+      item.innerHTML = `
+        <div class="history-main">
+          <span class="history-time">${date}</span>
+          <span class="history-inc">+${data.increment}</span>
+        </div>
+        <div class="history-result">Значение: ${data.result}</div>
+        <div class="history-id">ID: ${data.id}</div>
+      `;
+      historyListEl.appendChild(item);
+    } catch (error) {
+      historyListEl.innerHTML = '<div class="history-empty">Запись не найдена</div>';
+    }
+  }
+
+  async function incrementHandler(step) {
+    await fetchJson('/api/clicks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ increment: step })
+    });
+    await loadCounter();
+    await loadHistory();
+  }
+
+  async function resetHandler() {
+    await fetchJson('/api/clicks/reset', {
+      method: 'POST'
+    });
+    await loadCounter();
+    await loadHistory();
+  }
+
+  incrementButtons.forEach(button => {
+    button.addEventListener('click', () => {
+      const step = parseInt(button.dataset.step);
+      incrementHandler(step);
+    });
+  });
+
+  resetBtn.addEventListener('click', resetHandler);
+  loadHistoryBtn.addEventListener('click', loadHistory);
+  loadEntryBtn.addEventListener('click', loadEntryById);
+
+  (async () => {
+    await loadCounter();
+    await loadHistory();
+  })();
+</script>
+
+</body>
+</html>
